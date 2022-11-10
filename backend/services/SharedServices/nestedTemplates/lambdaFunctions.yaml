@@ -1,0 +1,788 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Template to deploy lambda functions as part of bootstrap
+Parameters:
+  CognitoUserPoolId:
+    Type: String
+  CognitoUserPoolClientId:
+    Type: String
+  CognitoOperationUsersUserPoolId:
+    Type: String
+  CognitoOperationUsersUserPoolClientId:
+    Type: String
+  TenantDetailsTableArn:
+    Type: String
+  TenantUserMappingTableArn:
+    Type: String
+
+Globals:
+  Function:
+    MemorySize: 128
+    Timeout: 29
+    Layers:
+      - !Sub "arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:14"
+    Environment:
+      Variables:
+        LOG_LEVEL: DEBUG
+        POWERTOOLS_METRICS_NAMESPACE: "ServerlessSaaS"
+
+Resources:
+  # Layers
+  ServerlessSaaSLayersDependencies:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: serverless-saas-dependencies
+      Description: Dependencies for project
+      ContentUri: ../layers/dependencies/
+      CompatibleRuntimes:
+        - nodejs16.x
+      RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: nodejs16.x
+  ServerlessSaaSLayersCommon:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: serverless-saas-common
+      Description: Common code for project
+      ContentUri: ../layers/common/
+      CompatibleRuntimes:
+        - nodejs16.x
+      RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: nodejs16.x
+
+  # Authorizer
+  # IAM Roles
+  AuthorizerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: authorizer-execution-role
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+      Policies:
+        - PolicyName: authorizer-execution-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-idp:List*
+                Resource:
+                  - !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource:
+                  - !Ref TenantDetailsTableArn
+
+  # Functions
+  SharedServicesAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: AuthorizerExecutionRole
+    Properties:
+      CodeUri: ../dist/resources/SharedServiceAuthorizer/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt AuthorizerExecutionRole.Arn
+      MemorySize: 256
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          OPERATION_USERS_USER_POOL: !Ref CognitoOperationUsersUserPoolId
+          OPERATION_USERS_APP_CLIENT: !Ref CognitoOperationUsersUserPoolClientId
+          TABLE_TENANT_DETAILS: "ServerlessSaaS-TenantDetails"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - sharedServiceAuthorizer.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "jose"
+    #       - "axios"
+
+  # Tenant Registration
+  # IAM Roles
+  RegisterTenantLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub tenant-registration-lambda-execution-role-${AWS::Region}
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+
+  # Functions
+  RegisterTenantFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: RegisterTenantLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/TenantRegistration/RegisterTenant/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt RegisterTenantLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables: # Need to find a better way than hard coding resource paths
+          CREATE_TENANT_ADMIN_USER_RESOURCE_PATH: "/user/tenant-admin"
+          CREATE_TENANT_RESOURCE_PATH: "/tenant"
+          PROVISION_TENANT_RESOURCE_PATH: "/provisioning"
+          POWERTOOLS_SERVICE_NAME: "TenantRegistration.RegisterTenant"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - registerTenant.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "uuid"
+    #       - "axios"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+
+  # Tenant Management
+  # IAM Roles
+  TenantManagementLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub tenant-management-lambda-execution-role-${AWS::Region}
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+      Policies:
+        - PolicyName: !Sub create-tenant-execution-policy-${AWS::Region}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                Resource:
+                  - !Ref TenantDetailsTableArn
+                  - !Join ["", [!Ref TenantDetailsTableArn, "/index/*"]]
+
+  # Functions
+  CreateTenantFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantManagementLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/TenantManagement/CreateTenant/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantManagementLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          TABLE_TENANT_DETAILS: "ServerlessSaaS-TenantDetails"
+          POWERTOOLS_SERVICE_NAME: "TenantManagement.CreateTenant"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - createTenant.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "axios"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  ActivateTenantFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantManagementLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/TenantManagement/ActivateTenant/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantManagementLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: "TenantManagement.ActivateTenant"
+          ENABLE_USERS_BY_TENANT: "/users/enable"
+          PROVISION_TENANT: "/provisioning/"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - activateTenant.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "axios"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  GetTenantFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantManagementLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/TenantManagement/GetTenant/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantManagementLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: "TenantManagement.GetTenant"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - getTenant.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "axios"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  DeactivateTenantFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantManagementLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/TenantManagement/DeactivateTenant/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantManagementLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: "TenantManagement.DeactivateTenant"
+          DEPROVISION_TENANT: "/provisioning/"
+          DISABLE_USERS_BY_TENANT: "/users/disable"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - deactivateTenant.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "axios"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  UpdateTenantFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantManagementLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/TenantManagement/UpdateTenant/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantManagementLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: "TenantManagement.UpdateTenant"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - updateTenant.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "axios"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  GetTenantsFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantManagementLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/TenantManagement/GetTenants/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantManagementLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - getTenants.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "axios"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+
+  # User Management
+  # IAM Roles
+  TenantUserPoolLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub tenant-userpool-lambda-execution-role-${AWS::Region}
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+      Policies:
+        - PolicyName: !Sub tenant-userpool-lambda-execution-policy-${AWS::Region}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-idp:*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource:
+                  - !Ref TenantDetailsTableArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                Resource:
+                  - !Ref TenantUserMappingTableArn
+  CreateUserLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub create-user-lambda-execution-role-${AWS::Region}
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+      Policies:
+        - PolicyName: !Sub create-user-lambda-execution-policy-${AWS::Region}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-idp:*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource:
+                  - !Ref TenantUserMappingTableArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource:
+                  - !Ref TenantDetailsTableArn
+
+  # Functions
+  CreateTenantAdminUserFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: CreateUserLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/UserManagement/CreateTenantAdminUser/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt CreateUserLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          TENANT_USER_POOL_ID: !Ref CognitoUserPoolId
+          TENANT_APP_CLIENT_ID: !Ref CognitoUserPoolClientId
+          POWERTOOLS_SERVICE_NAME: "UserManagement.CreateTenantAdmin"
+          TABLE_TENANT_USER_MAPPING: "ServerlessSaaS-TenantUserMapping"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - handler.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  CreateUserFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: CreateUserLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/UserManagement/CreateUser/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt CreateUserLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          TENANT_USER_POOL_ID: !Ref CognitoUserPoolId
+          POWERTOOLS_SERVICE_NAME: "UserManagement.CreateUser"
+          TABLE_TENANT_USER_MAPPING: "ServerlessSaaS-TenantUserMapping"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - createTenantAdminUser.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  UpdateUserFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantUserPoolLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/UserManagement/UpdateUser/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantUserPoolLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          TENANT_USER_POOL_ID: !Ref CognitoUserPoolId
+          POWERTOOLS_SERVICE_NAME: "UserManagement.UpdateUser"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - updateUser.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  DisableUserFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantUserPoolLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/UserManagement/DisableUser/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantUserPoolLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          TENANT_USER_POOL_ID: !Ref CognitoUserPoolId
+          POWERTOOLS_SERVICE_NAME: "UserManagement.DisableUser"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - disableUser.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  DisableUsersByTenantFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantUserPoolLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/UserManagement/DisableUsersByTenant/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantUserPoolLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          TABLE_TENANT_USER_MAPPING: "ServerlessSaaS-TenantUserMapping"
+          TENANT_USER_POOL_ID: !Ref CognitoUserPoolId
+          POWERTOOLS_SERVICE_NAME: "UserManagement.DisableUsersByTenant"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - disableUsersByTenant.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  EnableUsersByTenantFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantUserPoolLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/UserManagement/EnableUsersByTenant/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantUserPoolLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          TABLE_TENANT_USER_MAPPING: "ServerlessSaaS-TenantUserMapping"
+          TENANT_USER_POOL_ID: !Ref CognitoUserPoolId
+          POWERTOOLS_SERVICE_NAME: "UserManagement.EnableUsersByTenant"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - enableUsersByTenant.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  GetUserFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantUserPoolLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/UserManagement/GetUser/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantUserPoolLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          TENANT_USER_POOL_ID: !Ref CognitoUserPoolId
+          POWERTOOLS_SERVICE_NAME: "UserManagement.GetUser"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - getUser.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+  GetUsersFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: TenantUserPoolLambdaExecutionRole
+    Properties:
+      CodeUri: ../dist/useCases/UserManagement/GetUsers/
+      Handler: lambdaHandler.handler
+      Runtime: nodejs16.x
+      Role: !GetAtt TenantUserPoolLambdaExecutionRole.Arn
+      Tracing: Active
+      Layers:
+        - !Ref ServerlessSaaSLayersDependencies
+        - !Ref ServerlessSaaSLayersCommon
+      Environment:
+        Variables:
+          TENANT_USER_POOL_ID: !Ref CognitoUserPoolId
+          POWERTOOLS_SERVICE_NAME: "UserManagement.GetUsers"
+    # Metadata:
+    #   BuildMethod: esbuild
+    #   BuildProperties:
+    #     Minify: true
+    #     Target: "es2020"
+    #     Sourcemap: false
+    #     EntryPoints:
+    #       - getUsers.js
+    #     External:
+    #       - "@aws-lambda-powertools/logger"
+    #       - "@aws-sdk/client-dynamodb"
+    #       - "@aws-sdk/client-cognito-identity-provider"
+    #       - "@aws-sdk/lib-dynamodb"
+    #       - "@aws-sdk/signature-v4"
+    #       - "@aws-crypto/sha256-js"
+    #       - "@aws-sdk/protocol-http"
+
+Outputs:
+  RegisterTenantLambdaExecutionRoleArn:
+    Value: !GetAtt RegisterTenantLambdaExecutionRole.Arn
+  TenantManagementLambdaExecutionRoleArn:
+    Value: !GetAtt TenantManagementLambdaExecutionRole.Arn
+  RegisterTenantFunctionArn:
+    Value: !GetAtt RegisterTenantFunction.Arn
+  ActivateTenantFunctionArn:
+    Value: !GetAtt ActivateTenantFunction.Arn
+  GetTenantsFunctionArn:
+    Value: !GetAtt GetTenantsFunction.Arn
+  CreateTenantFunctionArn:
+    Value: !GetAtt CreateTenantFunction.Arn
+  GetTenantFunctionArn:
+    Value: !GetAtt GetTenantFunction.Arn
+  DeactivateTenantFunctionArn:
+    Value: !GetAtt DeactivateTenantFunction.Arn
+  UpdateTenantFunctionArn:
+    Value: !GetAtt UpdateTenantFunction.Arn
+  GetUsersFunctionArn:
+    Value: !GetAtt GetUsersFunction.Arn
+  GetUserFunctionArn:
+    Value: !GetAtt GetUserFunction.Arn
+  UpdateUserFunctionArn:
+    Value: !GetAtt UpdateUserFunction.Arn
+  DisableUserFunctionArn:
+    Value: !GetAtt DisableUserFunction.Arn
+  CreateTenantAdminUserFunctionArn:
+    Value: !GetAtt CreateTenantAdminUserFunction.Arn
+  CreateUserFunctionArn:
+    Value: !GetAtt CreateUserFunction.Arn
+  DisableUsersByTenantFunctionArn:
+    Value: !GetAtt DisableUsersByTenantFunction.Arn
+  EnableUsersByTenantFunctionArn:
+    Value: !GetAtt EnableUsersByTenantFunction.Arn
+  SharedServicesAuthorizerFunctionArn:
+    Value: !GetAtt SharedServicesAuthorizerFunction.Arn

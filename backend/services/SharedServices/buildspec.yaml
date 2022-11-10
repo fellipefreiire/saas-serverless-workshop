@@ -1,0 +1,28 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 16
+    commands:
+      - npm i -g typescript
+  build:
+    commands:
+      - npm install
+      - tsc
+      # node modules layer
+      - mkdir -p node-modules-layer/nodejs
+      - mv node_modules node-modules-layer/nodejs/
+      # common layer
+      - mkdir -p common-layer/nodejs
+      - mv dist/common/* common-layer/nodejs/
+  post_build:
+    commands:
+      - >
+        aws cloudformation package
+        --s3-bucket $S3_BUCKET
+        --template-file sam-template.yaml
+        --output-template-file cloudformation-template.yaml
+artifacts:
+  files:
+    - cloudformation-template.yaml
+  discard-paths: yes
