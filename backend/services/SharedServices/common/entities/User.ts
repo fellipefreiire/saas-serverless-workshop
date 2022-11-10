@@ -1,4 +1,4 @@
-import { IUser } from "./IUser"
+import { IUser } from "./interfaces/IUser"
 
 export class User implements IUser {
   public tenantId: string | undefined

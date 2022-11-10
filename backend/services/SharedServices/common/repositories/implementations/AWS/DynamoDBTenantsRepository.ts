@@ -1,16 +1,22 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import DynamoDBDocument, { DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import DynamoDBDocument, {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  ScanCommand,
+  UpdateCommand
+} from '@aws-sdk/lib-dynamodb'
+
+import { ITenantsRepository } from "../../interfaces/ITenantsRepository"
 import { Tenant } from "../../../entities/Tenant"
-import { ITenantsRepository } from "../../ITenantsRepository"
 
 //TODO CHECK FUNCTIONS RETURN
 
 export class DynamoDBTenantsRepository implements ITenantsRepository {
-  table: string
   private docClient: DynamoDBDocument.DynamoDBDocumentClient
   private dDBClient: DynamoDBClient
 
-  constructor(table: string) {
+  constructor() {
     this.dDBClient = new DynamoDBClient({})
     this.docClient = DynamoDBDocumentClient.from(this.dDBClient, {
       marshallOptions: {
@@ -18,11 +24,13 @@ export class DynamoDBTenantsRepository implements ITenantsRepository {
         removeUndefinedValues: true,
       }
     })
-    this.table = table
   }
-  async findTenantById(tenantId: string): Promise<Tenant> {
+  async findTenantById(
+    tenantId: string,
+    tableName: string
+  ): Promise<Tenant> {
     const params: DynamoDBDocument.GetCommandInput = {
-      TableName: this.table,
+      TableName: tableName,
       Key: { tenantId }
     }
 
@@ -32,9 +40,12 @@ export class DynamoDBTenantsRepository implements ITenantsRepository {
     return Item as Tenant
   }
 
-  async findTenantByEmail(tenantEmail: string): Promise<Tenant> {
+  async findTenantByEmail(
+    tenantEmail: string,
+    tableName: string
+  ): Promise<Tenant> {
     const params: DynamoDBDocument.GetCommandInput = {
-      TableName: this.table,
+      TableName: tableName,
       Key: { tenantEmail }
     }
 
@@ -44,18 +55,23 @@ export class DynamoDBTenantsRepository implements ITenantsRepository {
     return Item as Tenant
   }
 
-  async save(tenant: Tenant | Tenant): Promise<void> {
+  async save(
+    tenant: Tenant,
+    tableName: string
+  ): Promise<void> {
     const params: DynamoDBDocument.PutCommandInput = {
-      TableName: this.table,
+      TableName: tableName,
       Item: tenant
     }
 
     await this.docClient.send(new PutCommand(params))
   }
 
-  async findAllTenants(): Promise<Record<string, any>[]> {
+  async findAllTenants(
+    tableName: string
+  ): Promise<Record<string, any>[]> {
     const params: DynamoDBDocument.ScanCommandInput = {
-      TableName: this.table,
+      TableName: tableName,
     }
 
     const { Items } = await this.docClient
@@ -67,10 +83,11 @@ export class DynamoDBTenantsRepository implements ITenantsRepository {
   async update(
     id: string,
     objToUpdate: any,
+    tableName: string
   ): Promise<Partial<Tenant>> {
     const objKeys = Object.keys(objToUpdate)
     const params: DynamoDBDocument.UpdateCommandInput = {
-      TableName: this.table,
+      TableName: tableName,
       Key: { id },
       UpdateExpression: `SET ${objKeys.map((_, index) => `#key${index} = :value${index}`).join(", ")}`,
       ExpressionAttributeNames: objKeys.reduce((acc, key, index) => ({

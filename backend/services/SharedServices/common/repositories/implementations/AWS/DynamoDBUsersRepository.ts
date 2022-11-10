@@ -1,16 +1,22 @@
-import { User } from "/opt/nodejs/entities/User"
-import { IUsersRepository } from "../../IUsersRepository"
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import DynamoDBDocument, { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import DynamoDBDocument, {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  UpdateCommand
+} from '@aws-sdk/lib-dynamodb'
+
+import { IUsersRepository } from "../../interfaces/IUsersRepository"
+import { User } from "../../../entities/User"
 
 //TODO CHECK FUNCTIONS RETURN
 
 export class DynamoDBUsersRepository implements IUsersRepository {
-  table: string
   private docClient: DynamoDBDocument.DynamoDBDocumentClient
   private dDBClient: DynamoDBClient
 
-  constructor(table: string) {
+  constructor() {
     this.dDBClient = new DynamoDBClient({})
     this.docClient = DynamoDBDocumentClient.from(this.dDBClient, {
       marshallOptions: {
@@ -18,11 +24,13 @@ export class DynamoDBUsersRepository implements IUsersRepository {
         removeUndefinedValues: true,
       }
     })
-    this.table = table
   }
-  async findUserByEmail(userEmail: string): Promise<User> {
+  async findUserByEmail(
+    userEmail: string,
+    tableName: string
+  ): Promise<User> {
     const params: DynamoDBDocument.GetCommandInput = {
-      TableName: this.table,
+      TableName: tableName,
       Key: { userEmail }
     }
 
@@ -32,9 +40,12 @@ export class DynamoDBUsersRepository implements IUsersRepository {
     return Item as User
   }
 
-  async save(user: User): Promise<void> {
+  async save(
+    user: User,
+    tableName: string
+  ): Promise<void> {
     const params: DynamoDBDocument.PutCommandInput = {
-      TableName: this.table,
+      TableName: tableName,
       Item: user
     }
 
@@ -42,7 +53,8 @@ export class DynamoDBUsersRepository implements IUsersRepository {
   }
 
   async findUsersByTenantId(
-    tenantId: string
+    tenantId: string,
+    tableName: string
   ) {
     const keyConditionExpression = 'tenantId = :tenantId'
     const expressionAttributeValues = {
@@ -50,7 +62,7 @@ export class DynamoDBUsersRepository implements IUsersRepository {
     }
 
     const params: DynamoDBDocument.QueryCommandInput = {
-      TableName: this.table,
+      TableName: tableName,
       KeyConditionExpression: keyConditionExpression,
       ExpressionAttributeValues: expressionAttributeValues
     }
@@ -64,10 +76,11 @@ export class DynamoDBUsersRepository implements IUsersRepository {
   async update(
     id: string,
     objToUpdate: any,
+    tableName: string
   ): Promise<Partial<User>> {
     const objKeys = Object.keys(objToUpdate)
     const params: DynamoDBDocument.UpdateCommandInput = {
-      TableName: this.table,
+      TableName: tableName,
       Key: { id },
       UpdateExpression: `SET ${objKeys.map((_, index) => `#key${index} = :value${index}`).join(", ")}`,
       ExpressionAttributeNames: objKeys.reduce((acc, key, index) => ({

@@ -1,21 +1,22 @@
-import { APIGatewayProxyResult } from 'aws-lambda';
+import { APIGatewayProxyResult } from 'aws-lambda'
 
-import { IUtilsProvider } from '/opt/nodejs/providers/IUtilsProvider';
-import { ILoggerProvider } from '/opt/nodejs/providers/ILoggerProvider';
-import { ITenantsRepository } from '/opt/nodejs/repositories/ITenantsRepository';
+import { ITenantsRepository } from '/opt/nodejs/repositories/interfaces/ITenantsRepository'
+
+import { ILoggerProvider } from '/opt/nodejs/providers/interfaces/ILoggerProvider'
+import { IUtilsProvider } from '/opt/nodejs/providers/interfaces/IUtilsProvider'
 
 export class GetTenantsUseCase {
   constructor(
     private tenantsRepository: ITenantsRepository,
-    private utilsProvider: IUtilsProvider,
-    private loggerProvider: ILoggerProvider
+    private loggerProvider: ILoggerProvider,
+    private utilsProvider: IUtilsProvider
   ) { }
-  async execute()
+  async execute(tableName: string)
     : Promise<APIGatewayProxyResult | undefined> {
     try {
       this.loggerProvider.info('Request received to get tenants')
 
-      const getTenantsResponse = await this.tenantsRepository.findAllTenants()
+      const getTenantsResponse = await this.tenantsRepository.findAllTenants(tableName)
 
       this.loggerProvider.info('Request completed to get tenants')
       return this.utilsProvider.createSuccessResponse(getTenantsResponse)

@@ -1,17 +1,17 @@
-import { IIdentityProvider } from '/opt/nodejs/providers/IIdentityProvider';
-import { ILoggerProvider } from '/opt/nodejs/providers/ILoggerProvider';
-import { IUtilsProvider } from '/opt/nodejs/providers/IUtilsProvider';
+import { IIdentityProvider } from "/opt/nodejs/providers/interfaces/IIdentityProvider"
+import { ILoggerProvider } from "/opt/nodejs/providers/interfaces/ILoggerProvider"
+import { IUtilsProvider } from "/opt/nodejs/providers/interfaces/IUtilsProvider"
 
 export class GetUsersUseCase {
   constructor(
     private identityProvider: IIdentityProvider,
-    private utilsProvider: IUtilsProvider,
-    private loggerProvider: ILoggerProvider
+    private loggerProvider: ILoggerProvider,
+    private utilsProvider: IUtilsProvider
   ) { }
-  async execute() {
+  async execute(userPoolId: string) {
     try {
       this.loggerProvider.info('Request received to get users')
-      const response = await this.identityProvider.listUsers()
+      const response = await this.identityProvider.listUsers(userPoolId)
 
       this.loggerProvider.info(response)
       this.loggerProvider.info('Request completed to get users')

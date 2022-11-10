@@ -1,18 +1,19 @@
-import { GetTenantsUseCase } from './GetTenantsUseCase';
-import { DynamoDBTenantsRepository } from '/opt/nodejs/repositories/implementations/AWS/DynamoDBTenantsRepository';
-import { AWSUtilsProvider } from '/opt/nodejs/providers/implementations/AWS/UtilsProvider';
-import { AWSLoggerProvider } from '/opt/nodejs/providers/implementations/AWS/LoggerProvider';
+import { GetTenantsUseCase } from './GetTenantsUseCase'
 
-const tableTenantDetails = process.env.TABLE_TENANT_DETAILS
+import { DynamoDBTenantsRepository } from '/opt/nodejs/repositories/implementations/AWS/DynamoDBTenantsRepository'
 
-const dynamoDbTenantRepository = new DynamoDBTenantsRepository(tableTenantDetails!)
-const utilsProvider = new AWSUtilsProvider()
+import { AWSLoggerProvider } from '/opt/nodejs/providers/implementations/AWS/LoggerProvider'
+import { AWSUtilsProvider } from '/opt/nodejs/providers/implementations/AWS/UtilsProvider'
+
+const dynamoDbTenantRepository = new DynamoDBTenantsRepository()
+
 const loggerProvider = new AWSLoggerProvider()
+const utilsProvider = new AWSUtilsProvider()
 
 const getTenantsUseCase = new GetTenantsUseCase(
   dynamoDbTenantRepository,
-  utilsProvider,
   loggerProvider,
+  utilsProvider
 )
 
 export { getTenantsUseCase }

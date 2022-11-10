@@ -1,21 +1,23 @@
-import { IIdentityProvider } from '/opt/nodejs/providers/IIdentityProvider';
 import { IGetUserRequestDTO } from './GetUserDTO';
-import { IUtilsProvider } from '/opt/nodejs/providers/IUtilsProvider';
-import { ILoggerProvider } from '/opt/nodejs/providers/ILoggerProvider';
+
+import { IIdentityProvider } from '/opt/nodejs/providers/interfaces/IIdentityProvider';
+import { ILoggerProvider } from '/opt/nodejs/providers/interfaces/ILoggerProvider';
+import { IUtilsProvider } from '/opt/nodejs/providers/interfaces/IUtilsProvider';
 
 export class GetUserUseCase {
   constructor(
     private identityProvider: IIdentityProvider,
-    private utilsProvider: IUtilsProvider,
-    private loggerProvider: ILoggerProvider
+    private loggerProvider: ILoggerProvider,
+    private utilsProvider: IUtilsProvider
   ) { }
-  async execute(data: IGetUserRequestDTO) {
+  async execute(data: IGetUserRequestDTO, userPoolId: string) {
     try {
       this.loggerProvider.info('Request received to get user')
 
       const userName = data.userName
 
-      const response = await this.identityProvider.adminGetUser(userName)
+      const response = await this.identityProvider
+        .adminGetUser(userName, userPoolId)
 
       this.loggerProvider.info('Request completed to get user')
 

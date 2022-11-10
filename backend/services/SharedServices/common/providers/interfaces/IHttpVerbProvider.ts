@@ -1,4 +1,4 @@
-export interface IHttpVerb {
+export interface IHttpVerbProvider {
   GET: string
   POST: string
   PUT: string

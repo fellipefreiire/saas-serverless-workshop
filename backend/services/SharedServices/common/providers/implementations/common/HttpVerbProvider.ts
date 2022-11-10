@@ -1,6 +1,6 @@
-import { IHttpVerb } from "./IHttpVerb"
+import { IHttpVerbProvider } from "../../interfaces/IHttpVerbProvider"
 
-export class HttpVerb implements IHttpVerb {
+export class HttpVerbProvider implements IHttpVerbProvider {
   public GET: string
   public POST: string
   public PUT: string

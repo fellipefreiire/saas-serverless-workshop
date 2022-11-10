@@ -1,9 +1,12 @@
-import { IUtilsProvider, StatusCode } from "../../IUtilsProvider";
-import { APIGatewayProxyResult } from 'aws-lambda';
-import { SignatureV4 } from '@aws-sdk/signature-v4';
 import { Sha256 } from '@aws-crypto/sha256-js';
-import { URL } from 'url';
 import { HttpRequest } from '@aws-sdk/protocol-http';
+import { SignatureV4 } from '@aws-sdk/signature-v4';
+
+import { APIGatewayProxyResult } from 'aws-lambda';
+
+import { URL } from 'url';
+
+import { IUtilsProvider, StatusCode } from "../../interfaces/IUtilsProvider";
 
 export class AWSUtilsProvider implements IUtilsProvider {
   statusCode: StatusCode

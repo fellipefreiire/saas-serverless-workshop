@@ -1,22 +1,23 @@
-import { IIdentityProvider } from '/opt/nodejs/providers/IIdentityProvider';
 import { IUpdateUserParamDTO, IUpdateUserRequestDTO } from './UpdateUserDTO';
-import { IUtilsProvider } from '/opt/nodejs/providers/IUtilsProvider';
-import { ILoggerProvider } from '/opt/nodejs/providers/ILoggerProvider';
+
+import { IIdentityProvider } from '/opt/nodejs/providers/interfaces/IIdentityProvider';
+import { ILoggerProvider } from '/opt/nodejs/providers/interfaces/ILoggerProvider';
+import { IUtilsProvider } from '/opt/nodejs/providers/interfaces/IUtilsProvider';
 
 export class UpdateUserUseCase {
   constructor(
     private identityProvider: IIdentityProvider,
-    private utilsProvider: IUtilsProvider,
-    private loggerProvider: ILoggerProvider
+    private loggerProvider: ILoggerProvider,
+    private utilsProvider: IUtilsProvider
   ) { }
-  async execute({ userName }: IUpdateUserParamDTO, { userEmail, userRole }: IUpdateUserRequestDTO) {
+  async execute({ userName }: IUpdateUserParamDTO, { userEmail, userRole }: IUpdateUserRequestDTO, userPoolId: string) {
     try {
       this.loggerProvider.info('Request received to update user')
 
       await this.identityProvider.adminUpdateUser(userName, {
         email: userEmail,
         'custom:userRole': userRole
-      })
+      }, userPoolId)
 
       this.loggerProvider.info('Request completed to update user')
       return this.utilsProvider.createSuccessResponse('User updated')

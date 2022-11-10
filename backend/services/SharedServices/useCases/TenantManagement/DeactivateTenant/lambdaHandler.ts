@@ -2,6 +2,7 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { deactivateTenantUseCase } from '.'
 
 const region = process.env.AWS_REGION
+const tableTenantDetails = process.env.TABLE_TENANT_DETAILS
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult | undefined> => {
   const disableUsersPath = process.env.DISABLE_USERS_BY_TENANT
@@ -15,7 +16,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     stageName,
     host: host!,
     region: region!
-  })
+  }, tableTenantDetails!)
 
   return deactivateTenantResponse
 }

@@ -1,21 +1,22 @@
-import { IRegisterTenantRequestDTO } from './RegisterTenantDTO';
-import axios from 'axios';
-import { IUtilsProvider } from '/opt/nodejs/providers/IUtilsProvider';
-import { ILoggerProvider } from '/opt/nodejs/providers/ILoggerProvider';
+import axios from 'axios'
 
-const createTenantAdminUserResourcePath = process.env.CREATE_TENANT_ADMIN_USER_RESOURCE_PATH
-const createTenantResourcePath = process.env.CREATE_TENANT_RESOURCE_PATH
-const region = process.env.AWS_REGION
+import { IRegisterTenantRequestDTO } from './RegisterTenantDTO'
+
+import { ILoggerProvider } from '/opt/nodejs/providers/interfaces/ILoggerProvider'
+import { IUtilsProvider } from '/opt/nodejs/providers/interfaces/IUtilsProvider'
 
 export class RegisterTenantUseCase {
   constructor(
-    private utilsProvider: IUtilsProvider,
-    private loggerProvider: ILoggerProvider
+    private loggerProvider: ILoggerProvider,
+    private utilsProvider: IUtilsProvider
   ) { }
   async execute(
     tenantDetails: IRegisterTenantRequestDTO,
     host: string,
     stageName: string,
+    createTenantAdminUserResourcePath: string,
+    createTenantResourcePath: string,
+    region: string
   ) {
     try {
       this.loggerProvider.info('Request received to register tenant')
@@ -25,7 +26,8 @@ export class RegisterTenantUseCase {
         tenantDetails,
         host,
         stageName,
-        createTenantAdminUserResourcePath!,
+        createTenantAdminUserResourcePath,
+        region
       )
 
       this.loggerProvider.info(createUserResponse)
@@ -36,7 +38,8 @@ export class RegisterTenantUseCase {
         tenantDetails,
         host,
         stageName,
-        createTenantResourcePath!
+        createTenantResourcePath,
+        region
       )
 
       this.loggerProvider.info(createTenantResponse)
@@ -61,6 +64,7 @@ export class RegisterTenantUseCase {
     host: string | undefined,
     stageName: string,
     path: string,
+    region: string
   ): Promise<any> {
     const url = `https://${host}/${stageName}${path}`
 
@@ -79,7 +83,8 @@ export class RegisterTenantUseCase {
     tenantDetails: any,
     host: string | undefined,
     stageName: string,
-    path: string
+    path: string,
+    region: string
   ): Promise<any> {
     const url = `https://${host}/${stageName}${path}`
 

@@ -1,17 +1,24 @@
-// import { ISharedServiceAuthorizerRequestDTO } from './SharedServiceAuthorizerDTO';
-import { ILoggerProvider } from '/opt/nodejs/providers/ILoggerProvider';
-import jose from 'jose'
 import axios from 'axios'
-import { IAuthPolicyProvider } from '/opt/nodejs/providers/IAuthPolicyProvider';
+import jose from 'jose'
+
 import { ISharedServiceAuthorizerRequestDTO } from './SharedServiceAuthorizerDTO';
 
-const region = process.env.AWS_REGION
-const userPoolOperationUser = process.env.OPERATION_USERS_USER_POOL
+import { IAuthManagerProvider } from '/opt/nodejs/providers/interfaces/IAuthManagerProvider';
+import { IAuthPolicyProvider } from '/opt/nodejs/providers/interfaces/IAuthPolicyProvider';
+import { IHttpVerbProvider } from '/opt/nodejs/providers/interfaces/IHttpVerbProvider';
+import { ILoggerProvider } from '/opt/nodejs/providers/interfaces/ILoggerProvider';
+
 const appClientOperationUser = process.env.OPERATION_USERS_APP_CLIENT
+const region = process.env.AWS_REGION
+const tenantUserPoolId = process.env.OPERATION_USERS_USER_POOL
+const tenantAppClientId = process.env.OPERATION_USERS_APP_CLIENT
+const userPoolOperationUser = process.env.OPERATION_USERS_USER_POOL
 
 export class SharedServiceAuthorizerUseCase {
   constructor(
+    private authManagerProvider: IAuthManagerProvider,
     private authPolicyProvider: IAuthPolicyProvider,
+    private httpVerbProvider: IHttpVerbProvider,
     private loggerProvider: ILoggerProvider
   ) { }
   async execute(
@@ -34,8 +41,16 @@ export class SharedServiceAuthorizerUseCase {
       const unauthorizedClaims = jose.decodeJwt(jwtBearerToken)
       this.loggerProvider.info(unauthorizedClaims)
 
-      const userpoolId = userPoolOperationUser
-      const appClientId = appClientOperationUser
+      let userpoolId
+      let appClientId
+
+      if (this.authManagerProvider.isSaaSProvider(String(unauthorizedClaims['custom:userRole']))) {
+        userpoolId = userPoolOperationUser
+        appClientId = appClientOperationUser
+      } else {
+        userpoolId = tenantUserPoolId
+        appClientId = tenantAppClientId
+      }
 
       const keysUrl =
         `https://cognito-idp.${region}.amazonaws.com/${userpoolId}/.well-known/jwks.json`
@@ -46,20 +61,26 @@ export class SharedServiceAuthorizerUseCase {
 
       const validJwt = await this.validateJWT(jwtBearerToken, appClientId, keys)
 
-      let principalId
+      let principalId: string
       let userName: string
+      let tenantId: string
+      let userRole: string
+
       if (validJwt === false) {
         this.loggerProvider.error('Unauthorized')
         throw new Error('Unauthorized')
       } else {
         this.loggerProvider.info(validJwt)
-        principalId = validJwt.sub
+        principalId = validJwt.sub!
         userName = validJwt['cognito:username'] as string
+        tenantId = validJwt['custom:tenantId'] as string
+        userRole = validJwt['custom:userRole'] as string
       }
 
       const tmp = event.methodArn.split(':')
       const apigatewayArnTmp = tmp[5].split('/')
       const awsAccountId = tmp[4]
+
 
       this.authPolicyProvider.principalId = principalId!
       this.authPolicyProvider.awsAccountId = awsAccountId
@@ -67,13 +88,29 @@ export class SharedServiceAuthorizerUseCase {
       this.authPolicyProvider.region = tmp[3]
       this.authPolicyProvider.stage = apigatewayArnTmp[1]
 
-      this.authPolicyProvider.allowAllMethods()
+      if (
+        this.authManagerProvider.isTenantAdmin(userRole) ||
+        this.authManagerProvider.isSystemAdmin(userRole)
+      ) {
+        this.authPolicyProvider.allowAllMethods()
+      }
+
+      if (this.authManagerProvider.isTenantAdmin(userRole)) {
+        this.authPolicyProvider
+          .denyMethod(this.httpVerbProvider.POST, 'tenant-activation')
+        this.authPolicyProvider.denyMethod(this.httpVerbProvider.GET, 'tenants')
+      } else {
+        this.authPolicyProvider.allowMethod(this.httpVerbProvider.GET, 'user/*')
+        this.authPolicyProvider.allowMethod(this.httpVerbProvider.PUT, 'user/*')
+      }
 
       const authResponse = this.authPolicyProvider.build()
 
       context = {
         'userName': userName,
-        'userPoolId': userpoolId
+        'userPoolId': userpoolId,
+        'tenantId': tenantId,
+        'userRole': userRole
       }
 
       authResponse['context'] = context

@@ -1,22 +1,22 @@
-import { DynamoDBUsersRepository } from '/opt/nodejs/repositories/implementations/AWS/DynamoDBUsersRepository';
-import { CognitoIdentityProvider } from '/opt/nodejs/providers/implementations/AWS/CognitoIdentityProvider';
 import { CreateUserUseCase } from './CreateUserUseCase';
-import { AWSUtilsProvider } from '/opt/nodejs/providers/implementations/AWS/UtilsProvider';
+
+import { DynamoDBUsersRepository } from '/opt/nodejs/repositories/implementations/AWS/DynamoDBUsersRepository';
+
+import { AWSCognitoIdentityProvider } from '/opt/nodejs/providers/implementations/AWS/CognitoIdentityProvider';
 import { AWSLoggerProvider } from '/opt/nodejs/providers/implementations/AWS/LoggerProvider';
+import { AWSUtilsProvider } from '/opt/nodejs/providers/implementations/AWS/UtilsProvider';
 
-const tableTenantUserMap = process.env.TABLE_TENANT_USER_MAPPING
-const userPoolId = process.env.TENANT_USER_POOL_ID
+const dynamoDbUsersRepository = new DynamoDBUsersRepository()
 
-const dynamoDbUsersRepository = new DynamoDBUsersRepository(tableTenantUserMap!)
-const cognitoIdentityProvider = new CognitoIdentityProvider(userPoolId!)
-const utilsProvider = new AWSUtilsProvider()
+const cognitoIdentityProvider = new AWSCognitoIdentityProvider()
 const loggerProvider = new AWSLoggerProvider()
+const utilsProvider = new AWSUtilsProvider()
 
 const createUserUseCase = new CreateUserUseCase(
   dynamoDbUsersRepository,
   cognitoIdentityProvider,
-  utilsProvider,
-  loggerProvider
+  loggerProvider,
+  utilsProvider
 )
 
 export { createUserUseCase }

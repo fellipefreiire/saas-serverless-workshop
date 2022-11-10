@@ -1,18 +1,19 @@
-import { IUtilsProvider } from './../../../common/providers/IUtilsProvider';
-import { IIdentityProvider } from '/opt/nodejs/providers/IIdentityProvider';
 import { IDisableUserRequestDTO } from './DisableUserDTO';
-import { ILoggerProvider } from '/opt/nodejs/providers/ILoggerProvider';
+
+import { IIdentityProvider } from '/opt/nodejs/providers/interfaces/IIdentityProvider';
+import { ILoggerProvider } from '/opt/nodejs/providers/interfaces/ILoggerProvider';
+import { IUtilsProvider } from '/opt/nodejs/providers/interfaces/IUtilsProvider';
 
 export class DisableUserUseCase {
   constructor(
     private identityProvider: IIdentityProvider,
-    private utilsProvider: IUtilsProvider,
-    private loggerProvider: ILoggerProvider
+    private loggerProvider: ILoggerProvider,
+    private utilsProvider: IUtilsProvider
   ) { }
-  async execute({ userName }: IDisableUserRequestDTO) {
+  async execute({ userName }: IDisableUserRequestDTO, userPoolId: string) {
     try {
       this.loggerProvider.info('Request received to disable user')
-      await this.identityProvider.adminDisableUser(userName)
+      await this.identityProvider.adminDisableUser(userName, userPoolId)
 
       this.loggerProvider.info('Request completed to disable user')
 

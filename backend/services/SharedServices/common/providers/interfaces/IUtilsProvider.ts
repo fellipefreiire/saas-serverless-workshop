@@ -1,8 +1,12 @@
+//TODO Enhance provider
+
 export interface IUtilsProvider {
   statusCode: StatusCode
   createSuccessResponse(message: any): HttpResult
   generateResponse(inputObject: Record<any, any>): HttpResult
-  getAuth(apiUrl: string, region: string, method: string, body?: Record<any, any>): Promise<any>
+  getAuth(
+    apiUrl: string, region: string, method: string, body?: Record<any, any>
+  ): Promise<any>
 }
 
 interface HttpResult {

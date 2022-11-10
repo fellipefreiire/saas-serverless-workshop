@@ -1,13 +1,20 @@
 import { SharedServiceAuthorizerUseCase } from './SharedServiceAuthorizerUseCase';
-import { AWSLoggerProvider } from '/opt/nodejs/providers/implementations/AWS/LoggerProvider';
-import { AuthPolicyProvider } from '/opt/nodejs/providers/implementations/AWS/AuthPolicyProvider';
 
+import { AWSAuthManagerProvider } from '/opt/nodejs/providers/implementations/AWS/AuthManagerProvider';
+import { AWSAuthPolicyProvider } from '/opt/nodejs/providers/implementations/AWS/AuthPolicyProvider';
+import { HttpVerbProvider } from '/opt/nodejs/providers/implementations/common/HttpVerbProvider';
+import { AWSLoggerProvider } from '/opt/nodejs/providers/implementations/AWS/LoggerProvider';
+
+const authManagerProvider = new AWSAuthManagerProvider
+const httpVerbProvider = new HttpVerbProvider()
+const authPolicyProvider = new AWSAuthPolicyProvider(httpVerbProvider)
 const loggerProvider = new AWSLoggerProvider()
-const authPolicyProvider = new AuthPolicyProvider()
 
 const sharedServiceAuthorizerUseCase = new SharedServiceAuthorizerUseCase(
+  authManagerProvider,
   authPolicyProvider,
-  loggerProvider,
+  httpVerbProvider,
+  loggerProvider
 )
 
 export { sharedServiceAuthorizerUseCase }

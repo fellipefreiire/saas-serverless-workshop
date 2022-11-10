@@ -1,5 +1,6 @@
-import { ILoggerProvider } from "../../ILoggerProvider";
 import { Logger } from '@aws-lambda-powertools/logger'
+
+import { ILoggerProvider } from "../../interfaces/ILoggerProvider";
 
 export class AWSLoggerProvider implements ILoggerProvider {
   private logger: Logger

@@ -1,22 +1,28 @@
-import { User } from '/opt/nodejs/entities/User';
-import { IIdentityProvider } from '/opt/nodejs/providers/IIdentityProvider';
-import { IUsersRepository } from '/opt/nodejs/repositories/IUsersRepository';
 import { ICreateUserRequestDTO } from './CreateUserDTO';
-import { IUtilsProvider } from '/opt/nodejs/providers/IUtilsProvider';
-import { ILoggerProvider } from '/opt/nodejs/providers/ILoggerProvider';
+
+import { User } from '/opt/nodejs/entities/User';
+
+import { IUsersRepository } from '/opt/nodejs/repositories/interfaces/IUsersRepository';
+
+import { IIdentityProvider } from '/opt/nodejs/providers/interfaces/IIdentityProvider';
+import { ILoggerProvider } from '/opt/nodejs/providers/interfaces/ILoggerProvider';
+import { IUtilsProvider } from '/opt/nodejs/providers/interfaces/IUtilsProvider';
 
 export class CreateUserUseCase {
   constructor(
     private usersRepository: IUsersRepository,
     private identityProvider: IIdentityProvider,
-    private utilsProvider: IUtilsProvider,
-    private loggerProvider: ILoggerProvider
+    private loggerProvider: ILoggerProvider,
+    private utilsProvider: IUtilsProvider
   ) { }
-  async execute({ tenantId, userName, userEmail, userRole }: ICreateUserRequestDTO) {
+  async execute(
+    { tenantId, userName, userEmail, userRole }: ICreateUserRequestDTO, userPoolId: string,
+    tableName: string
+  ) {
     try {
       this.loggerProvider.info('Request received to create new user')
       const userAlreadyExists = await this.usersRepository
-        .findUserByEmail(userEmail)
+        .findUserByEmail(userEmail, tableName)
 
       if (userAlreadyExists) {
         throw new Error('User already exists.')
@@ -26,8 +32,8 @@ export class CreateUserUseCase {
         email: userEmail,
         'custom:userRole': userRole,
         'custom:tenantId': tenantId
-      })
-      await this.identityProvider.adminAddUserToGroup(userName, tenantId)
+      }, userPoolId)
+      await this.identityProvider.adminAddUserToGroup(userName, tenantId, userPoolId)
 
       const user = new User()
 
@@ -36,7 +42,7 @@ export class CreateUserUseCase {
       user.email = userEmail
       user.userRole = userRole
 
-      await this.usersRepository.save(user)
+      await this.usersRepository.save(user, tableName)
 
       this.loggerProvider.info(user)
       this.loggerProvider.info('Request completed to create new user')

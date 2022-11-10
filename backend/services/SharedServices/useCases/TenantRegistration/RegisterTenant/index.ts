@@ -1,13 +1,14 @@
-import { RegisterTenantUseCase } from './RegisterTenantUseCase';
-import { AWSUtilsProvider } from '/opt/nodejs/providers/implementations/AWS/UtilsProvider';
-import { AWSLoggerProvider } from '/opt/nodejs/providers/implementations/AWS/LoggerProvider';
+import { RegisterTenantUseCase } from './RegisterTenantUseCase'
 
-const utilsProvider = new AWSUtilsProvider()
+import { AWSLoggerProvider } from '/opt/nodejs/providers/implementations/AWS/LoggerProvider'
+import { AWSUtilsProvider } from '/opt/nodejs/providers/implementations/AWS/UtilsProvider'
+
 const loggerProvider = new AWSLoggerProvider()
+const utilsProvider = new AWSUtilsProvider()
 
 const registerTenantUseCase = new RegisterTenantUseCase(
-  utilsProvider,
   loggerProvider,
+  utilsProvider
 )
 
 export { registerTenantUseCase }

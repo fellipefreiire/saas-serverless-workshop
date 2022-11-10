@@ -1,18 +1,17 @@
-import { CognitoIdentityProvider } from '/opt/nodejs/providers/implementations/AWS/CognitoIdentityProvider';
 import { GetUserUseCase } from './GetUserUseCase';
-import { AWSUtilsProvider } from '/opt/nodejs/providers/implementations/AWS/UtilsProvider';
+
+import { AWSCognitoIdentityProvider } from '/opt/nodejs/providers/implementations/AWS/CognitoIdentityProvider';
 import { AWSLoggerProvider } from '/opt/nodejs/providers/implementations/AWS/LoggerProvider';
+import { AWSUtilsProvider } from '/opt/nodejs/providers/implementations/AWS/UtilsProvider';
 
-const userPoolId = process.env.TENANT_USER_POOL_ID
-
-const cognitoIdentityProvider = new CognitoIdentityProvider(userPoolId!)
-const utilsProvider = new AWSUtilsProvider()
+const cognitoIdentityProvider = new AWSCognitoIdentityProvider()
 const loggerProvider = new AWSLoggerProvider()
+const utilsProvider = new AWSUtilsProvider()
 
 const getUserUseCase = new GetUserUseCase(
   cognitoIdentityProvider,
-  utilsProvider,
-  loggerProvider
+  loggerProvider,
+  utilsProvider
 )
 
 export { getUserUseCase }

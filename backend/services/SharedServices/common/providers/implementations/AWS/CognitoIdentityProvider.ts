@@ -1,47 +1,49 @@
-import { AdminCreateUserAttributes, Group, IIdentityProvider, UpdateUserAttributes } from './../../IIdentityProvider';
-import CognitoIDP, { CognitoIdentityProviderClient, AdminCreateUserCommand, CreateGroupCommand, AdminAddUserToGroupCommand, AdminDisableUserCommand, AdminEnableUserCommand, AdminGetUserCommand, ListUsersCommand, AdminUpdateUserAttributesCommand } from '@aws-sdk/client-cognito-identity-provider'
+import CognitoIDP, {
+  AdminAddUserToGroupCommand,
+  AdminEnableUserCommand,
+  AdminCreateUserCommand,
+  AdminDisableUserCommand,
+  AdminGetUserCommand,
+  AdminUpdateUserAttributesCommand,
+  CognitoIdentityProviderClient,
+  CreateGroupCommand,
+  ListUsersCommand
+} from '@aws-sdk/client-cognito-identity-provider'
+
+import {
+  AdminCreateUserAttributes,
+  Group,
+  IIdentityProvider,
+  UpdateUserAttributes
+} from './../../interfaces/IIdentityProvider';
+
 import { User } from '../../../entities/User';
 
-export class CognitoIdentityProvider implements IIdentityProvider {
+export class AWSCognitoIdentityProvider implements IIdentityProvider {
   private cognitoIDPClient: CognitoIdentityProviderClient
-  private userPoolId: string
 
-  constructor(
-    userPoolId: string
-  ) {
+  constructor() {
     this.cognitoIDPClient = new CognitoIdentityProviderClient({})
-    this.userPoolId = userPoolId
   }
 
-  async createGroup(
+  async adminAddUserToGroup(
+    userName: string,
     groupName: string,
-    groupDescription: string
-  ): Promise<Group> {
-    const params: CognitoIDP.CreateGroupCommandInput = {
-      GroupName: groupName,
-      UserPoolId: this.userPoolId,
-      Description: groupDescription,
-      Precedence: 0
+    userPoolId: string
+  ): Promise<void> {
+    const params: CognitoIDP.AdminAddUserToGroupCommandInput = {
+      UserPoolId: userPoolId,
+      Username: userName,
+      GroupName: groupName
     }
 
-    const { Group } = await this.cognitoIDPClient.send(
-      new CreateGroupCommand(params)
-    )
-
-    const group = {
-      groupName: Group?.GroupName!,
-      description: Group?.Description!,
-      role: Group?.RoleArn!,
-      modified: Group?.LastModifiedDate!,
-      created: Group?.CreationDate!
-    }
-
-    return group
+    await this.cognitoIDPClient.send(new AdminAddUserToGroupCommand(params))
   }
 
   async adminCreateUser(
     userName: string,
-    userDetails: AdminCreateUserAttributes
+    userDetails: AdminCreateUserAttributes,
+    userPoolId: string
   ) {
     const userAttributes = Object.entries(userDetails).map(([key, value]) => {
       return {
@@ -51,7 +53,7 @@ export class CognitoIdentityProvider implements IIdentityProvider {
     })
 
     const params: CognitoIDP.AdminCreateUserCommandInput = {
-      UserPoolId: this.userPoolId,
+      UserPoolId: userPoolId,
       Username: userName,
       UserAttributes: userAttributes,
       ForceAliasCreation: true
@@ -60,24 +62,12 @@ export class CognitoIdentityProvider implements IIdentityProvider {
     await this.cognitoIDPClient.send(new AdminCreateUserCommand(params))
   }
 
-  async adminAddUserToGroup(
-    userName: string,
-    groupName: string
-  ): Promise<void> {
-    const params: CognitoIDP.AdminAddUserToGroupCommandInput = {
-      UserPoolId: this.userPoolId,
-      Username: userName,
-      GroupName: groupName
-    }
-
-    await this.cognitoIDPClient.send(new AdminAddUserToGroupCommand(params))
-  }
-
   async adminDisableUser(
-    userName: string
+    userName: string,
+    userPoolId: string
   ): Promise<void> {
     const params: CognitoIDP.AdminDisableUserCommandInput = {
-      UserPoolId: this.userPoolId,
+      UserPoolId: userPoolId,
       Username: userName,
     }
 
@@ -85,10 +75,11 @@ export class CognitoIdentityProvider implements IIdentityProvider {
   }
 
   async adminEnableUser(
-    userName: string | undefined
+    userName: string | undefined,
+    userPoolId: string
   ): Promise<void> {
     const params: CognitoIDP.AdminEnableUserCommandInput = {
-      UserPoolId: this.userPoolId,
+      UserPoolId: userPoolId,
       Username: userName,
     }
 
@@ -96,10 +87,11 @@ export class CognitoIdentityProvider implements IIdentityProvider {
   }
 
   async adminGetUser(
-    userName: string | undefined
+    userName: string | undefined,
+    userPoolId: string
   ): Promise<User> {
     const params: CognitoIDP.AdminGetUserCommandInput = {
-      UserPoolId: this.userPoolId,
+      UserPoolId: userPoolId,
       Username: userName
     }
 
@@ -126,9 +118,61 @@ export class CognitoIdentityProvider implements IIdentityProvider {
     return user
   }
 
-  async listUsers(): Promise<User[]> {
+  async adminUpdateUser(
+    userName: string,
+    userDetails: UpdateUserAttributes,
+    userPoolId: string
+  ): Promise<void> {
+    const userAttributes = Object.entries(userDetails).map(([key, value]) => {
+      return {
+        'Name': key,
+        'Value': value
+      }
+    })
+
+    const params: CognitoIDP.AdminUpdateUserAttributesCommandInput = {
+      Username: userName,
+      UserPoolId: userPoolId,
+      UserAttributes: userAttributes
+    }
+
+    await this.cognitoIDPClient.send(
+      new AdminUpdateUserAttributesCommand(params)
+    )
+  }
+
+  async createGroup(
+    groupName: string,
+    groupDescription: string,
+    userPoolId: string
+  ): Promise<Group> {
+    const params: CognitoIDP.CreateGroupCommandInput = {
+      GroupName: groupName,
+      UserPoolId: userPoolId,
+      Description: groupDescription,
+      Precedence: 0
+    }
+
+    const { Group } = await this.cognitoIDPClient.send(
+      new CreateGroupCommand(params)
+    )
+
+    const group = {
+      groupName: Group?.GroupName!,
+      description: Group?.Description!,
+      role: Group?.RoleArn!,
+      modified: Group?.LastModifiedDate!,
+      created: Group?.CreationDate!
+    }
+
+    return group
+  }
+
+  async listUsers(
+    userPoolId: string
+  ): Promise<User[]> {
     const params: CognitoIDP.ListUsersCommandInput = {
-      UserPoolId: this.userPoolId
+      UserPoolId: userPoolId
     }
 
     const { Users } = await this.cognitoIDPClient
@@ -167,25 +211,4 @@ export class CognitoIdentityProvider implements IIdentityProvider {
     return users
   }
 
-  async adminUpdateUser(
-    userName: string,
-    userDetails: UpdateUserAttributes
-  ): Promise<void> {
-    const userAttributes = Object.entries(userDetails).map(([key, value]) => {
-      return {
-        'Name': key,
-        'Value': value
-      }
-    })
-
-    const params: CognitoIDP.AdminUpdateUserAttributesCommandInput = {
-      Username: userName,
-      UserPoolId: this.userPoolId,
-      UserAttributes: userAttributes
-    }
-
-    await this.cognitoIDPClient.send(
-      new AdminUpdateUserAttributesCommand(params)
-    )
-  }
 }

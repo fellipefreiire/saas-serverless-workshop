@@ -1,4 +1,4 @@
-import { ITenant } from "./ITenant"
+import { ITenant } from "./interfaces/ITenant"
 
 export class Tenant implements ITenant {
   public tenantName: string | undefined

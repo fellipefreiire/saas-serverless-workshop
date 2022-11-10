@@ -1,17 +1,20 @@
-import { APIGatewayProxyResult } from 'aws-lambda';
-import { ICreateTenantDTO } from './CreateTenantDTO';
+import { APIGatewayProxyResult } from 'aws-lambda'
 
-import { ITenantsRepository } from '/opt/nodejs/repositories/ITenantsRepository';
-import { IUtilsProvider } from '/opt/nodejs/providers/IUtilsProvider';
-import { ILoggerProvider } from '/opt/nodejs/providers/ILoggerProvider';
+import { ICreateTenantDTO } from './CreateTenantDTO'
+
+import { ITenantsRepository } from '/opt/nodejs/repositories/interfaces/ITenantsRepository'
+
+import { ILoggerProvider } from '/opt/nodejs/providers/interfaces/ILoggerProvider'
+import { IUtilsProvider } from '/opt/nodejs/providers/interfaces/IUtilsProvider'
+
 
 export class CreateTenantUseCase {
   constructor(
     private tenantsRepository: ITenantsRepository,
-    private utilsProvider: IUtilsProvider,
-    private loggerProvider: ILoggerProvider
+    private loggerProvider: ILoggerProvider,
+    private utilsProvider: IUtilsProvider
   ) { }
-  async execute(tenantDetails: ICreateTenantDTO): Promise<APIGatewayProxyResult | undefined> {
+  async execute(tenantDetails: ICreateTenantDTO, tableName: string): Promise<APIGatewayProxyResult | undefined> {
     try {
       this.loggerProvider.info('Request received to create tenant')
 
@@ -20,7 +23,7 @@ export class CreateTenantUseCase {
         isActive: true
       }
 
-      await this.tenantsRepository.save(tenant)
+      await this.tenantsRepository.save(tenant, tableName)
 
       this.loggerProvider.info('Request completed to create tenant')
 

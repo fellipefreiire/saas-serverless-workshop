@@ -1,39 +1,31 @@
 import { APIGatewayAuthorizerResult } from 'aws-lambda'
-import { HttpVerb } from "../../../entities/HttpVerb"
-import { IAuthPolicyProvider } from '../../IAuthPolicyProvider'
-const httpVerb = new HttpVerb()
 
-export class AuthPolicyProvider implements IAuthPolicyProvider {
-  awsAccountId: string
-  principalId: string
-  version = '2012-10-17'
-  pathRegex = /^[/.a-zA-Z0-9-\*]+$/
+import { IAuthPolicyProvider } from '../../interfaces/IAuthPolicyProvider'
+import { IHttpVerbProvider } from '../../interfaces/IHttpVerbProvider'
 
-  allowMethods: any[]
-  denyMethods: any[]
+export class AWSAuthPolicyProvider implements IAuthPolicyProvider {
+  public awsAccountId = ''
+  public principalId = ''
+  public version = '2012-10-17'
+  public pathRegex = /^[/.a-zA-Z0-9-\*]+$/
 
-  restApiId = '*'
-  region = '*'
-  stage = '*'
+  public allowMethods: any[]
+  public denyMethods: any[]
+
+  public restApiId = '*'
+  public region = '*'
+  public stage = '*'
 
   constructor(
-    awsAccountId = '',
-    principalId = '',
-    allowMethods = [],
-    denyMethods = [],
-  ) {
-    this.awsAccountId = awsAccountId
-    this.principalId = principalId
-    this.allowMethods = allowMethods
-    this.denyMethods = denyMethods
-  }
+    private httpVerbProvider: IHttpVerbProvider
+  ) { }
 
   public allowAllMethods(): void {
-    this.__addMethod('Allow', httpVerb.ALL, '*', [])
+    this.__addMethod('Allow', this.httpVerbProvider.ALL, '*', [])
   }
 
   public denyAllMethods(): void {
-    this.__addMethod('Deny', httpVerb.ALL, '*', [])
+    this.__addMethod('Deny', this.httpVerbProvider.ALL, '*', [])
   }
 
   public allowMethod(
@@ -67,8 +59,12 @@ export class AuthPolicyProvider implements IAuthPolicyProvider {
   }
 
   public build(): APIGatewayAuthorizerResult {
-    if (
-      (this.allowMethods === undefined || this.allowMethods.length === 0) && (this.denyMethods === undefined || this.denyMethods.length === 0)) {
+    if ((this.allowMethods === undefined ||
+      this.allowMethods.length === 0
+    ) &&
+      (this.denyMethods === undefined ||
+        this.denyMethods.length === 0
+      )) {
       throw new Error('No statements defined for the policy')
     }
 
@@ -98,9 +94,7 @@ export class AuthPolicyProvider implements IAuthPolicyProvider {
     resource: string,
     conditions: [] | null
   ) {
-    const httpVerb = new HttpVerb()
-
-    if ((verb !== '*') && !(httpVerb.hasOwnProperty(verb))) {
+    if ((verb !== '*') && !(this.httpVerbProvider.hasOwnProperty(verb))) {
       throw new Error(`Invalid HTTP verb ${verb}. Allowed verbs in HttpVerb`)
     }
 
